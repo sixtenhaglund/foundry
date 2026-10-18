@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOUNDRY</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0c0e; color: #d8dce2;
+    font-family: 'Courier New', Consolas, monospace; font-weight: bold; text-transform: uppercase; user-select: none; }
+  #cv { position: fixed; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  .hidden { display: none !important; }
+  button, .btn { font: inherit; text-transform: uppercase; background: #23272e; color: #e4e8ee; border: 2px solid #4a515b; border-bottom-color: #2a2e34; border-right-color: #2a2e34;
+    padding: 6px 10px; cursor: pointer; letter-spacing: 1px; }
+  button:hover { background: #30353e; border-color: #d8b02a; }
+  button:active { transform: translateY(1px); }
+  button.on { background: #3a3218; border-color: #d8b02a; color: #ffd860; }
+  button.danger:hover { border-color: #e04040; color: #ff8080; }
+  button.big { font-size: 20px; padding: 12px 18px; min-width: 300px; }
+  input, select, textarea { font: inherit; text-transform: none; background: #111317; color: #e8ecf0; border: 1px solid #4a515b; padding: 3px 5px; }
+  input[type=number] { width: 70px; }
+  input[type=color] { width: 44px; height: 24px; padding: 0 2px; }
+  input[type=range] { width: 120px; accent-color: #d8b02a; }
+  input:focus, select:focus, textarea:focus { outline: 1px solid #d8b02a; }
+  ::-webkit-scrollbar { width: 10px; } ::-webkit-scrollbar-thumb { background: #3a3f47; } ::-webkit-scrollbar-track { background: #15171b; }
+
+  /* menus */
+  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    background: radial-gradient(ellipse at center, rgba(10,10,12,0.35), rgba(5,5,7,0.85)); }
+  .title { font-size: 84px; letter-spacing: 14px; color: #d8b02a; text-shadow: 5px 5px 0 #000, 0 0 30px rgba(255,140,40,0.35); margin: 0 0 4px; }
+  .sub { color: #8a929c; letter-spacing: 3px; margin-bottom: 18px; font-size: 14px; }
+  .stripe { height: 10px; width: 520px; background: repeating-linear-gradient(45deg, #d8b02a 0 12px, #1a1a1a 12px 24px); margin: 4px 0 14px; }
+  .panel { background: rgba(20,22,26,0.94); border: 2px solid #3a3f47; padding: 16px 18px; max-height: 80vh; overflow: auto; min-width: 560px; }
+  .panel h2 { margin: 0 0 12px; color: #d8b02a; letter-spacing: 3px; }
+  .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #262a30; }
+  .row .grow { flex: 1; }
+  .muted { color: #7a828c; font-size: 12px; }
+  .help { font-size: 12px; color: #9aa2ac; line-height: 1.7; text-align: left; }
+  .help b { color: #ffd860; }
+
+  /* editor */
+  #ed { position: fixed; inset: 0; pointer-events: none; }
+  #ed > * { pointer-events: auto; }
+  #edTop { position: absolute; left: 0; right: 0; top: 0; height: 40px; background: #16181c; border-bottom: 2px solid #3a3f47; display: flex; align-items: center; gap: 4px; padding: 0 6px; overflow-x: auto; }
+  #edTop button { padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+  #edTop .name { color: #d8b02a; padding: 0 8px; white-space: nowrap; }
+  #edTop .sep { width: 2px; height: 24px; background: #3a3f47; margin: 0 3px; }
+  #edPal { position: absolute; left: 0; top: 40px; bottom: 24px; width: 214px; background: #16181c; border-right: 2px solid #3a3f47; overflow-y: auto; padding: 4px; }
+  #edPal .cat { color: #d8b02a; font-size: 12px; letter-spacing: 2px; padding: 8px 4px 4px; cursor: pointer; border-top: 1px solid #2a2e34; margin-top: 4px; }
+  #edPal .cat.closed + .items { display: none; }
+  #edPal .items { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; }
+  #edPal .it { background: #0f1114; border: 2px solid #2a2e34; height: 48px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+  #edPal .it:hover { border-color: #8a7020; }
+  #edPal .it.on { border-color: #ffd860; background: #2a2614; }
+  #edPal .it canvas { width: 44px; height: 44px; image-rendering: pixelated; }
+  #edPal .wide { grid-column: span 4; height: auto; padding: 5px; font-size: 11px; }
+  #edProps { position: absolute; right: 0; top: 40px; bottom: 24px; width: 290px; background: #16181c; border-left: 2px solid #3a3f47; overflow-y: auto; padding: 8px; font-size: 12px; }
+  #edProps h3 { margin: 4px 0 8px; color: #d8b02a; letter-spacing: 2px; font-size: 14px; }
+  #edProps h4 { margin: 12px 0 6px; color: #9ad0ff; font-size: 12px; letter-spacing: 2px; border-top: 1px solid #2a2e34; padding-top: 8px; }
+  #edProps label { display: flex; justify-content: space-between; align-items: center; gap: 6px; padding: 3px 0; }
+  #edProps label span { color: #aab2bc; }
+  #edProps .kf { display: grid; grid-template-columns: 22px 1fr 1fr 1fr; gap: 3px; align-items: center; padding: 3px 0; border-bottom: 1px dashed #2a2e34; }
+  #edProps .kf input { width: 100%; } #edProps .kf select { grid-column: 2 / 4; }
+  #edProps button { font-size: 11px; padding: 4px 6px; margin: 2px 2px 2px 0; }
+  #edStat { position: absolute; left: 0; right: 0; bottom: 0; height: 24px; background: #111317; border-top: 2px solid #3a3f47; font-size: 11px; color: #8a929c; padding: 4px 8px; white-space: nowrap; overflow: hidden; }
+  #edStat b { color: #ffd860; }
+  #toast { position: fixed; left: 50%; top: 56px; transform: translateX(-50%); background: #2a2614; border: 2px solid #d8b02a; padding: 6px 14px; color: #ffe890; z-index: 20; pointer-events: none; }
+
+  /* makers */
+  #mk { position: fixed; inset: 0; display: grid; grid-template-columns: 230px 1fr 560px; background: #101215; }
+  #mk .col { overflow-y: auto; padding: 10px; border-right: 2px solid #2a2e34; }
+  #mk h2 { margin: 0 0 10px; color: #d8b02a; letter-spacing: 3px; font-size: 18px; }
+  #mk .list button { display: block; width: 100%; text-align: left; margin-bottom: 4px; font-size: 12px; }
+  #mk .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+  #mk .tabs button { flex: 1; }
+  #mk label { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 5px 0; border-bottom: 1px solid #1e2126; font-size: 13px; }
+  #mk label span { color: #aab2bc; }
+  #mk .num { display: flex; align-items: center; gap: 6px; }
+  #mk .atk { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; font-size: 12px; padding: 4px 0; }
+  #mk .atk label { border: none; justify-content: flex-start; padding: 1px 0; }
+  #mk .phase { border: 1px solid #3a3f47; padding: 6px 8px; margin: 6px 0; background: #15181c; }
+  #mkPrev { width: 540px; height: 304px; image-rendering: pixelated; border: 2px solid #3a3f47; background: #000; display: block; }
+  #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.65); display: flex; align-items: center; justify-content: center; z-index: 30; }
+  #modal .panel label { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 5px 0; }
+  #modal textarea { width: 100%; height: 160px; font-size: 11px; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="menu" class="screen hidden"></div>
+<div id="ed" class="hidden">
+  <div id="edTop"></div>
+  <div id="edPal"></div>
+  <div id="edProps"></div>
+  <div id="edStat"></div>
+</div>
+<div id="mk" class="hidden"></div>
+<div id="modal" class="hidden"></div>
+<div id="toast" class="hidden"></div>
+
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/level.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/player.js"></script>
+<script src="js/combat.js"></script>
+<script src="js/hazards.js"></script>
+<script src="js/enemies.js"></script>
+<script src="js/boss.js"></script>
+<script src="js/render.js"></script>
+<script src="js/game.js"></script>
+<script src="js/campaign.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/maker.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
