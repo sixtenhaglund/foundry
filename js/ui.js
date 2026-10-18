@@ -179,15 +179,31 @@ function drawObjIcon(ctx, o, cx, cy) {
     case 'enemy': { const e = makeEnemy({ x, y, def: o.def, face: 'right' }); drawEnemy(ctx, e, ICON_W); break; }
     case 'boss': { const b = makeBoss({ x, y, def: o.def }, { arena: null }); ctx.save(); const s = bossSize(b.d), k = Math.min(1, 40 / Math.max(s.w, s.h)); ctx.translate(x, y); ctx.scale(k, k); ctx.translate(-x, -y); b.face = 1; drawBoss(ctx, b, ICON_W); ctx.restore(); break; }
     case 'arena': ctx.fillStyle = '#ff9040'; for (let i = -14; i < 14; i += 4) { ctx.fillRect(x + i, y - 12, 2, 1); ctx.fillRect(x + i, y + 12, 2, 1); ctx.fillRect(x - 15, y + i, 1, 2); ctx.fillRect(x + 15, y + i, 1, 2); } ptext(ctx, 'ARENA', x, y - 2, '#ff9040', 1, 'c', null); break;
-    case 'deco': drawDeco(ctx, { x, y, kind: o.kind }, t); break;
-    case 'tile': ctx.drawImage(tileTex(o.ch, 0, o.bg), x - 16, y - 16, 32, 32); if (o.ch === '~') { ctx.fillStyle = 'rgba(40,110,170,0.8)'; ctx.fillRect(x - 16, y - 16, 32, 32); ctx.fillStyle = '#a0d0ff'; ctx.fillRect(x - 16, y - 16, 32, 2); }
+    case 'deco': { const d = { x, y, kind: o.kind, ang: 0 }; if (o.kind === 'chain') d.rope = makeRope(x, y - 14, x, y + 14, 9, 1); if (o.kind === 'cables') d.ropes = [makeRope(x - 16, y - 4, x + 16, y - 4, 10, 1.12)]; if (o.kind === 'sparks') { d.rope = makeRope(x, y - 12, x, y + 12, 7, 1); } drawDeco(ctx, d, t); break; }
+    case 'heater': drawHeater(ctx, Object.assign({ heat: 0.85, hot: false }, o, { x, y, tw: 2 }), t); break;
+    case 'wallzap': drawZap(ctx, Object.assign({ state: 1 }, o, { x, y }), t, false); break;
+    case 'flamer': {
+      const f = Object.assign({ state: 2 }, o, { x, y }), a = f.angle * Math.PI / 180;
+      for (let i = 0; i < 18; i++) { ctx.fillStyle = ['#fff0a0', '#ffc040', '#ff7020'][i % 3]; ctx.fillRect(Math.round(x + Math.cos(a) * (6 + i) + rand(-1, 1) * i * 0.2), Math.round(y + Math.sin(a) * (6 + i) + rand(-1, 1) * i * 0.2), 2, 2); }
+      drawFlamer(ctx, f, t, false); break;
+    }
+    case 'mine': drawPMine(ctx, { x, y: y + 4 }, 0.1); break;
+    case 'vent': drawVent(ctx, { x, y: y + 6, onNow: true }, t); ctx.fillStyle = '#d8dce0'; for (let i = 0; i < 6; i++) ctx.fillRect(x - 4 + (i * 5) % 9, y - 4 - i * 3, 2, 2); break;
+    case 'tile':
+      if (MAT_OF[o.ch] !== undefined || TILES[o.ch]?.slope) { ctx.drawImage(terrainIcon(o.ch), x - 16, y - 16, 32, 32); break; }
+      if (o.ch === '%') { ctx.fillStyle = '#e04a10'; ctx.fillRect(x - 16, y - 12, 32, 28); ctx.fillStyle = '#ffb040'; ctx.fillRect(x - 16, y - 12, 32, 3); ctx.fillStyle = '#ffe080'; ctx.fillRect(x - 16, y - 12, 32, 1); ctx.fillStyle = '#801800'; ctx.fillRect(x - 8, y, 9, 3); ctx.fillRect(x + 4, y + 8, 7, 2); break; }
+      ctx.drawImage(tileTex(o.ch, 0, o.bg), x - 16, y - 16, 32, 32); if (o.ch === '~') { ctx.fillStyle = 'rgba(40,110,170,0.8)'; ctx.fillRect(x - 16, y - 16, 32, 32); ctx.fillStyle = '#a0d0ff'; ctx.fillRect(x - 16, y - 16, 32, 2); }
       if (o.ch === 'D') { drawGate(ctx, x - 16, y - 16, true, 0, false); drawGate(ctx, x, y - 16, true, 0, false); drawGate(ctx, x - 16, y, true, 0, false); drawGate(ctx, x, y, true, 0, false); }
       if (o.ch === '.') { ctx.strokeStyle = '#e04040'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - 10, y - 10); ctx.lineTo(x + 10, y + 10); ctx.moveTo(x + 10, y - 10); ctx.lineTo(x - 10, y + 10); ctx.stroke(); }
       break;
   }
 }
+const ICONS = new Map();
 function iconCanvas(o, size = 48) {
+  const key = JSON.stringify(o) + size;
+  if (ICONS.has(key) && !/enemy|boss/.test(o.t)) return ICONS.get(key);
   const c = mkCanvas(size, size), g = c.getContext('2d'); g.imageSmoothingEnabled = false;
   try { drawObjIcon(g, o, size / 2, size / 2); } catch (e) { console.warn('icon', o, e); }
+  ICONS.set(key, c);
   return c;
 }

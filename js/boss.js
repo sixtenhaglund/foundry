@@ -6,7 +6,7 @@ function makeBoss(o, w, defOverride) {
   let A = w.arena;
   const ar = A ? { x: A.x - A.tw * TS / 2, y: A.y - A.th * TS / 2, w: A.tw * TS, h: A.th * TS } : { x: o.x - 12 * TS, y: o.y - 8 * TS, w: 24 * TS, h: 12 * TS };
   return { o, d, x: o.x - s.w / 2, y: o.y - s.h / 2, w: s.w, h: s.h, vx: 0, vy: 0, hp: d.maxHp, maxHp: d.maxHp, phase: 0, active: false,
-    cd: 1.5, atk: null, last: '', face: -1, flash: 0, dead: false, dying: false, deadT: 0, ar, anim: 0, alpha: 1, tp: 3, ground: false,
+    cd: 1.5, atk: null, last: '', face: -1, flash: 0, dead: false, dying: false, deadT: 0, ar, anim: 0, alpha: 1, tp: 3, ground: false, noSink: true,
     bvx: 90, bvy: 70 };
 }
 
@@ -26,6 +26,7 @@ function updateBoss(w, dt) {
     if (Math.random() < dt * 14) boomFx(w, b.x + rand(0, b.w), b.y + rand(0, b.h), rand(0.4, 0.9));
     if (b.deadT > 2.2) {
       b.dead = true; boomFx(w, b.x + b.w / 2, b.y + b.h / 2, 2); w.gatesClosed = false; bossMusic(false); sfx('gate');
+      for (let i = 0; i < 16; i++) addDebris(w, b.x + rand(0, b.w), b.y + rand(0, b.h), rand(5, 14), randi(2, 5), pick([b.d.color, b.d.accent, shade(b.d.color, -0.4), '#1e2226']), 0, -rand(100, 260));
       w.banner = { text: 'BOSS DEFEATED', sub: 'THE EXIT IS OPEN', life: 3 };
       for (const k of ['ammo', 'health']) w.pickups.push({ t: k, x: b.x + b.w / 2 + (k === 'ammo' ? -10 : 10), y: b.y + b.h - 5, amount: k === 'ammo' ? 12 : 50, drop: true });
     }
@@ -238,6 +239,7 @@ function slamLand(w, b) {
 }
 function bossBullet(w, b, a, spMul = 1) {
   const d = b.d, cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  b.recoil = 1;
   w.bullets.push({ x: cx + Math.cos(a) * b.w * 0.4, y: cy + Math.sin(a) * b.h * 0.4, vx: Math.cos(a) * d.bs * spMul, vy: Math.sin(a) * d.bs * spMul, owner: 'e', dmg: d.bd, life: 4, col: d.eye, big: true, cause: d.name });
   sfx('eshoot');
 }

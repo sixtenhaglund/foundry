@@ -96,6 +96,7 @@ function makeWorld(L, opt = {}) {
     fg: L.fg.map(r => r.split('')), bg: L.bg.map(r => r.split('')),
     time: 0, timeLeft: L.time || 0, gatesClosed: false,
     platforms: [], crushers: [], saws: [], turrets: [], coils: [], lasers: [], pickups: [], decos: [], signs: [], checkpoints: [],
+    heaters: [], zaps: [], flamers: [], pmines: [], vents: [], debris: [], ropes: [], dust: [],
     enemies: [], bullets: [], rockets: [], booms: [], parts: [], arcs: [], texts: [], movers: [], bossObjs: [],
     exit: null, spawn: null, boss: null, arena: null, kills: 0, shake: 0, editor: !!opt.editor,
   };
@@ -117,6 +118,11 @@ function makeWorld(L, opt = {}) {
       case 'coil': o.state = 0; o.hitDone = false; w.coils.push(o); break;
       case 'laser': o.ang = o.angle * Math.PI / 180; o.onNow = true; o.ex = o.x; o.ey = o.y; w.lasers.push(o); break;
       case 'deco': o.seed = Math.random() * 100; if (o.kind === 'steam' && !opt.editor) o._w = w; w.decos.push(o); break;
+      case 'heater': o.heat = 0; w.heaters.push(o); break;
+      case 'wallzap': o.state = 0; w.zaps.push(o); break;
+      case 'flamer': o.state = 0; o.ang = o.angle * Math.PI / 180; w.flamers.push(o); break;
+      case 'mine': o.armed = 0; o.beep = 0; w.pmines.push(o); break;
+      case 'vent': o.onNow = false; w.vents.push(o); break;
       case 'arena': w.arena = o; break;
       case 'enemy': if (!opt.editor) w.enemies.push(makeEnemy(o)); else w.enemies.push(Object.assign(makeEnemy(o), { still: true })); break;
       case 'boss': w.bossObjs.push(o); break;
@@ -124,6 +130,7 @@ function makeWorld(L, opt = {}) {
   }
   if (w.bossObjs.length) w.boss = makeBoss(w.bossObjs[0], w);
   if (!w.spawn) w.spawn = { x: 3 * TS, y: 3 * TS };
+  initAnim(w);
   return w;
 }
 
@@ -142,7 +149,18 @@ function blocks(w, ch, kind) {
   if (kind === 'r') return !!T.rok;
   return !!T.las;
 }
-function blockedAt(w, px, py, kind) { return blocks(w, tileAt(w, Math.floor(px / TS), Math.floor(py / TS)), kind); }
+function blockedAt(w, px, py, kind) {
+  const tx = Math.floor(px / TS), ty = Math.floor(py / TS), ch = tileAt(w, tx, ty), T = TILES[ch];
+  if (T && T.slope) return py >= ty * TS + TS - T.slope(px - tx * TS);
+  return blocks(w, ch, kind);
+}
+// y of the slope surface at x, if (x,y) is inside a slope tile; otherwise null
+function slopeAt(w, px, py) {
+  const tx = Math.floor(px / TS), ty = Math.floor(py / TS), T = TILES[tileAt(w, tx, ty)];
+  return T && T.slope ? ty * TS + TS - T.slope(clamp(px - tx * TS, 0, TS)) : null;
+}
+// where something standing at x, around height y, would rest
+function groundY(w, px, py) { const s = slopeAt(w, px, py); return s != null ? s : Math.floor(py / TS) * TS; }
 function tileUnder(w, px, py) { return tileAt(w, Math.floor(px / TS), Math.floor(py / TS)); }
 
 // crusher heads count as solid walls
@@ -163,10 +181,21 @@ function moveBody(w, b, dx, dy, drop = false) {
   // --- X
   if (dx) {
     b.x += dx;
-    const y0 = Math.floor(b.y / TS), y1 = Math.floor((b.y + b.h - 0.01) / TS);
     const col = dx > 0 ? Math.floor((b.x + b.w - 0.01) / TS) : Math.floor(b.x / TS);
-    for (let ty = y0; ty <= y1; ty++) if (blocks(w, tileAt(w, col, ty), 'p')) {
-      b.x = dx > 0 ? col * TS - b.w : (col + 1) * TS; res.hitX = true; break;
+    const xHit = () => {
+      const y0 = Math.floor(b.y / TS), y1 = Math.floor((b.y + b.h - 0.01) / TS);
+      for (let ty = y0; ty <= y1; ty++) if (blocks(w, tileAt(w, col, ty), 'p')) return true;
+      return false;
+    };
+    if (xHit()) {
+      // step up small ledges (like where a slope meets a block), the way you step onto a curb
+      let stepped = false;
+      if (b.ground || b.onSlope) {
+        const y0 = b.y;
+        for (let s = 1; s <= 6 && !stepped; s++) { b.y = y0 - s; if (!xHit() && !blockedAt(w, b.x + b.w / 2, b.y, 'p')) stepped = true; }
+        if (!stepped) b.y = y0;
+      }
+      if (!stepped) { b.x = dx > 0 ? col * TS - b.w : (col + 1) * TS; res.hitX = true; }
     }
     for (const c of w.crushers) { const r = crusherRect(c); if (rectsHit(b, r)) { b.x = dx > 0 ? r.x - b.w : r.x + r.w; res.hitX = true; } }
   }
@@ -178,7 +207,8 @@ function moveBody(w, b, dx, dy, drop = false) {
     const row = dy > 0 ? Math.floor((b.y + b.h - 0.01) / TS) : Math.floor(b.y / TS);
     for (let tx = x0; tx <= x1; tx++) {
       const ch = tileAt(w, tx, row);
-      const top = TILES[ch] && (TILES[ch].oneway || (TILES[ch].ladder && !TILES[tileAt(w, tx, row - 1)]?.ladder));   // ladder tops are standable
+      const top = TILES[ch] && (TILES[ch].oneway || (TILES[ch].ladder && !TILES[tileAt(w, tx, row - 1)]?.ladder)   // ladder tops are standable
+        || (b.noSink && TILES[ch].liquid && !TILES[tileAt(w, tx, row - 1)]?.liquid));                               // bosses walk on top of liquids
       if (blocks(w, ch, 'p') || (dy > 0 && !drop && top && oldBottom <= row * TS + 0.5)) {
         if (dy > 0) { b.y = row * TS - b.h; res.ground = true; } else { b.y = (row + 1) * TS; res.ceil = true; }
         res.hitY = true; break;
@@ -195,6 +225,15 @@ function moveBody(w, b, dx, dy, drop = false) {
       }
     }
   }
+  // --- slopes: put the feet on the slanted surface
+  const fx = b.x + b.w / 2, foot = b.y + b.h;
+  let s = slopeAt(w, fx, foot - 0.01);
+  if (s != null && foot > s && foot - s < 14 && dy >= -1) { b.y = s - b.h; res.ground = true; res.hitY = dy > 0; b.onSlope = true; }
+  else if (s == null && (b.ground || b.onSlope) && dy >= 0 && !res.ground) {
+    s = slopeAt(w, fx, foot + 7);                     // walking down a slope: stick to it
+    if (s != null && s >= foot - 0.5 && s - foot < 7.5) { b.y = s - b.h; res.ground = true; b.onSlope = true; }
+    else b.onSlope = false;
+  } else if (s == null) b.onSlope = false;
   return res;
 }
 function rectInTile(w, R, test) {
@@ -203,7 +242,12 @@ function rectInTile(w, R, test) {
   return null;
 }
 // does a body stand on solid ground right now (for AI ledge checks)
-function solidBelow(w, px, py) { const ch = tileUnder(w, px, py); return blocks(w, ch, 'p') || (TILES[ch] && TILES[ch].oneway); }
+function solidBelow(w, px, py) {
+  const ch = tileUnder(w, px, py), T = TILES[ch];
+  if (T && T.slope) return true;
+  if (TILES[tileUnder(w, px, py + 6)]?.slope) return true;
+  return blocks(w, ch, 'p') || (T && T.oneway);
+}
 
 // ray from (x,y) in angle a; stops at tiles that block `kind`. Returns end point.
 function raycast(w, x, y, a, max, kind = 'l') {

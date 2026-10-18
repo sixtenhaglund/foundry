@@ -161,7 +161,7 @@ function makerTick(dt) {
   w.time += dt;
   const quiet = AU.ctx; AU.ctx = null;        // keep the preview silent
   try {
-    updateHazards(w, dt); updatePlayer(w, dt, ctl); updateEnemies(w, dt); updateBoss(w, dt); updateBullets(w, dt); updateEffects(w, dt); updateParts(w, dt);
+    updateHazards(w, dt); updatePlayer(w, dt, ctl); updateEnemies(w, dt); updateBoss(w, dt); updateBullets(w, dt); updateEffects(w, dt); updateParts(w, dt); updateAnim(w, dt, null);
   } finally { AU.ctx = quiet; }
   if ((MK.kind === 'enemy' && (!w.enemies.length || w.enemies.every(e => e.dead))) || (w.boss && w.boss.dead) || MK.t > 30) MK.world = null;
   if (MK.pv.width !== w.pw || MK.pv.height !== w.ph) { MK.pv.width = w.pw; MK.pv.height = w.ph; }   // show the whole room

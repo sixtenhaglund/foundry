@@ -16,6 +16,7 @@ function resetWorld() {
   if (G.cp) w.checkpoints.forEach(c => { if (c.id === G.cp.id) c.on = true; });
   G.w = w; G.endT = 0; bossMusic(false);
   snapCam(G.w);
+  prewarmTerrain(w, w.player.x, w.player.y);
 }
 function snapCam(w) { const P = w.player; G.cam.x = P.x - VW / 2; G.cam.y = P.y - VH / 2; clampCam(w, VW, VH); }
 function clampCam(w, vw, vh) {
@@ -35,15 +36,17 @@ function updatePlay(dt, ctl) {
   }
   updateMovers(w, dt);
   updateHazards(w, dt);
+  updateTraps(w, dt);
   updatePlayer(w, dt, ctl);
   updateEnemies(w, dt);
   updateBoss(w, dt);
   updateBullets(w, dt);
   updateEffects(w, dt);
   updateParts(w, dt);
+  updateAnim(w, dt, G.cam);
   for (const k of w.pickups) if (k.drop && !k.landed && !k.taken) {
     k.vy = Math.min((k.vy || -80) + 500 * dt, 250); k.y += k.vy * dt;
-    if (k.vy > 0 && (blockedAt(w, k.x, k.y + 5, 'p') || solidBelow(w, k.x, k.y + 5))) { k.landed = true; k.y = Math.floor((k.y + 5) / TS) * TS - 5; }
+    if (k.vy > 0 && (blockedAt(w, k.x, k.y + 5, 'p') || solidBelow(w, k.x, k.y + 5))) { k.landed = true; k.y = groundY(w, k.x, k.y + 5) - 5; }
     if (k.y > w.ph + 40) k.taken = true;
   }
   if (w.cp && w.cp !== G.cp) G.cp = w.cp;

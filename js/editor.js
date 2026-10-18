@@ -13,9 +13,13 @@ function paletteCats() {
   const T = (ch, bg) => ({ kind: 'tile', layer: bg ? 'bg' : 'fg', ch, name: (bg ? BG_TILES : TILES)[ch].name });
   const O = (t, name, p = {}, path = null) => ({ kind: 'obj', t, name, p, path });
   return [
-    ['TILES', [...FG_KEYS.filter(k => !'^v<>D~L'.includes(k)).map(k => T(k)), Object.assign(T('.'), { name: 'Eraser (tiles)' })]],
+    ['TILES', [...['#', 'C', 'R', 'H', 'S'].map(k => T(k)), Object.assign(T('.'), { name: 'Eraser (tiles)' })]],
+    ['SLOPES', ['/', '\\', 'q', 'Q', 'P', 'p'].map(k => T(k))],
     ['BACKGROUND', [...BG_KEYS.map(k => T(k, true)), Object.assign(T('.', true), { name: 'Eraser (background)' })]],
-    ['HAZARDS', [T('^'), T('v'), T('<'), T('>'),
+    ['HAZARDS', [T('^'), T('v'), T('<'), T('>'), T('%'),
+      O('heater', 'Heat coil (floor)', { dir: 'floor' }), O('heater', 'Heat coil (ceiling)', { dir: 'ceiling' }), O('heater', 'Heat coil (left wall)', { dir: 'left wall' }), O('heater', 'Heat coil (right wall)', { dir: 'right wall' }),
+      O('wallzap', 'Wall zapper (shoots right)', { dir: 'right' }), O('wallzap', 'Wall zapper (shoots left)', { dir: 'left' }), O('wallzap', 'Wall zapper (shoots down)', { dir: 'down' }), O('wallzap', 'Wall zapper (shoots up)', { dir: 'up' }),
+      O('flamer', 'Flame jet (up)', { angle: -90 }), O('flamer', 'Flame jet (sideways)', { angle: 0 }), O('flamer', 'Flame jet (down)', { angle: 90 }), O('mine', 'Proximity mine'),
       O('crusher', 'Crusher (slams down)', { dir: 'down' }), O('crusher', 'Crusher (slams up)', { dir: 'up' }), O('crusher', 'Crusher (slams left)', { dir: 'left' }), O('crusher', 'Crusher (slams right)', { dir: 'right' }),
       O('saw', 'Saw blade'), O('saw', 'Moving saw', {}, [64, 0]), O('turret', 'Turret: shoots when crossed', { mode: 'when crossed' }), O('turret', 'Turret: shoots randomly', { mode: 'randomly', angle: -90 }),
       O('turret', 'Turret: aims at you', { mode: 'aims at you' }), O('cturret', 'Ceiling turret (can not die)'), O('coil', 'Electric coil'), O('laser', 'Straight laser'),
@@ -24,7 +28,7 @@ function paletteCats() {
     ['BOSSES', [O('arena', 'Boss arena (closes the red gates)'), T('D'), ...allBossIds().map(id => O('boss', getBoss(id).name, { def: id }))]],
     ['PICKUPS', [O('ammo', 'Bullet ammo'), O('rockets', 'Rocket ammo'), O('health', 'Health pack')]],
     ['MECHANICS', [O('spawn', 'Player start'), O('exit', 'Exit door'), O('checkpoint', 'Checkpoint'), O('sign', 'Message sign'),
-      O('platform', 'Moving platform', {}, [96, 0]), T('='), T('L'), T('~'), T('G')]],
+      O('platform', 'Moving platform', {}, [96, 0]), O('vent', 'Steam launcher (always on)'), O('vent', 'Steam launcher (blasts)', { period: 2.5, on: 0.8 }), T('='), T('L'), T('~'), T('G')]],
     ['DECOR', DECO_KINDS.map(k => O('deco', k, { kind: k }))],
   ];
 }
@@ -113,19 +117,32 @@ function objAt(wx, wy) {
   }
   return null;
 }
-const STANDS = { spawn: 1, exit: 1, checkpoint: 1, ammo: 1, rockets: 1, health: 1, enemy: 1, boss: 1, coil: 1, sign: 1 };
-const STAND_DECO = { 'barrel': 1, 'toxic barrel': 1, 'crate': 1, 'tank': 1, 'warning sign': 1, 'skull sign': 1, 'monitor': 1 };
+const STANDS = { spawn: 1, exit: 1, checkpoint: 1, ammo: 1, rockets: 1, health: 1, enemy: 1, boss: 1, coil: 1, sign: 1, mine: 1, vent: 1 };
+const STAND_DECO = { 'barrel': 1, 'toxic barrel': 1, 'crate': 1, 'tank': 1, 'warning sign': 1, 'skull sign': 1, 'monitor': 1, 'server': 1, 'piston': 1 };
 function dropToFloor(o) {
   const s = objSize(o), tx = Math.floor(o.x / TS);
   for (let ty = Math.max(0, Math.floor((o.y - s.h / 2 + 2) / TS)); ty < Math.min(ED.L.h, Math.floor(o.y / TS) + 14); ty++) {
     const T = TILES[ED.L.fg[ty] && ED.L.fg[ty][tx]];
+    if (T && T.slope && ty * TS >= o.y - s.h / 2 - TS) { o.y = ty * TS + TS - T.slope(clamp(o.x - tx * TS, 0, TS)) - s.h / 2; return; }
     if (T && (T.solid || T.oneway) && ty * TS >= o.y - s.h / 2) { o.y = ty * TS - s.h / 2; return; }
+  }
+}
+// heat coils stick to the nearest floor / ceiling / wall in their direction
+function snapHeater(o) {
+  const solid = (tx, ty) => !!TILES[ED.L.fg[ty] && ED.L.fg[ty][tx]]?.solid;
+  const tx = Math.floor(o.x / TS), ty = Math.floor(o.y / TS);
+  for (let k = 0; k < 10; k++) {
+    if (o.dir === 'floor' && solid(tx, ty + k)) { o.y = (ty + k) * TS - 3; return; }
+    if (o.dir === 'ceiling' && solid(tx, ty - k)) { o.y = (ty - k + 1) * TS + 3; return; }
+    if (o.dir === 'left wall' && solid(tx - k, ty)) { o.x = (tx - k + 1) * TS + 3; return; }
+    if (o.dir === 'right wall' && solid(tx + k, ty)) { o.x = (tx + k) * TS - 3; return; }
   }
 }
 function newObjFromCur(wx, wy) {
   const it = ED.cur, s = edSnap();
   const o = Object.assign({ id: uid(), t: it.t, x: snapV(wx, s), y: snapV(wy, s) }, deep(OBJ[it.t].def || {}), deep(it.p || {}));
   if (o.t === 'crusher' && o.dir === 'up') o.len = 4;
+  if (o.t === 'heater' && ED.floorSnap && !ED.keys.Alt) snapHeater(o);
   if (ED.floorSnap && !ED.keys.Alt && (STANDS[o.t] || (o.t === 'deco' && STAND_DECO[o.kind]))) dropToFloor(o);
   if (it.path) o.path = { pts: [{ x: o.x + it.path[0], y: o.y + it.path[1], d: 2, e: 'ease in-out' }], mode: 'ping', wait: 0.3, start: 'always', near: 96 };
   return o;
@@ -309,9 +326,9 @@ function edUpdate(dt) {
   if (ED.dirty) {
     ED.world = makeWorld(ED.L, { editor: true }); ED.dirty = false;
     for (const o of ED.world.movers) o.active = true;
-    updateHazards(ED.world, 0);
+    updateHazards(ED.world, 0); updateTraps(ED.world, 0);
   }
-  if (ED.preview) { const w = ED.world; w.time += dt; updateMovers(w, dt); updateHazards(w, dt); updateBullets(w, dt); updateParts(w, dt); }
+  if (ED.preview) { const w = ED.world; w.time += dt; updateMovers(w, dt); updateHazards(w, dt); updateTraps(w, dt); updateBullets(w, dt); updateParts(w, dt); updateAnim(w, dt, null); }
 }
 
 function edTest(fromMouse) {

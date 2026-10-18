@@ -9,10 +9,19 @@ const TILES = {
   'C': { name: 'Concrete', solid: 1, bul: 1, rok: 1, las: 1, col: '#6e6a63' },
   'R': { name: 'Rusty plate', solid: 1, bul: 1, rok: 1, las: 1, col: '#7a4a2e' },
   'H': { name: 'Hazard block', solid: 1, bul: 1, rok: 1, las: 1, col: '#c9a227' },
+  'S': { name: 'Dark rock', solid: 1, bul: 1, rok: 1, las: 1, col: '#3e3a42' },
+  // slopes: h(x) = how tall the solid part is (0..16) at x (0..16) inside the tile
+  '/':  { name: 'Slope (steep, up to the right)', slope: x => x, bul: 1, rok: 1, las: 1, col: '#5b6470' },
+  '\\': { name: 'Slope (steep, up to the left)', slope: x => 16 - x, bul: 1, rok: 1, las: 1, col: '#5b6470' },
+  'q':  { name: 'Gentle slope up-right (low half)', slope: x => x / 2, bul: 1, rok: 1, las: 1, col: '#5b6470' },
+  'Q':  { name: 'Gentle slope up-right (high half)', slope: x => 8 + x / 2, bul: 1, rok: 1, las: 1, col: '#5b6470' },
+  'P':  { name: 'Gentle slope up-left (high half)', slope: x => 16 - x / 2, bul: 1, rok: 1, las: 1, col: '#5b6470' },
+  'p':  { name: 'Gentle slope up-left (low half)', slope: x => 8 - x / 2, bul: 1, rok: 1, las: 1, col: '#5b6470' },
   'G': { name: 'Grate (bullets pass, rockets stop)', solid: 1, rok: 1, col: '#4a5560' },
   '=': { name: 'Girder platform (jump through)', oneway: 1, col: '#8a5a2b' },
   'L': { name: 'Ladder', ladder: 1, col: '#9a8a5a' },
-  '~': { name: 'Water', water: 1, col: '#2a6aa0' },
+  '~': { name: 'Water', water: 1, liquid: 1, col: '#2a6aa0' },
+  '%': { name: 'Lava', lava: 1, liquid: 1, col: '#ff5a10' },
   '^': { name: 'Spikes up', spike: 1, col: '#b0b8c0' },
   'v': { name: 'Spikes down', spike: 1, col: '#b0b8c0' },
   '<': { name: 'Spikes left', spike: 1, col: '#b0b8c0' },
@@ -26,14 +35,15 @@ const BG_TILES = {
   'b': { name: 'Dark brick', col: '#2b2320' },
   'm': { name: 'Mesh window', col: '#1c2228' },
   'c': { name: 'Caution wall', col: '#2c2a1e' },
+  'r': { name: 'Cave rock wall', col: '#1e1c22' },
 };
-const FG_KEYS = ['#', 'C', 'R', 'H', 'G', '=', 'L', '~', '^', 'v', '<', '>', 'D'];
-const BG_KEYS = ['w', 'p', 'b', 'm', 'c'];
+const FG_KEYS = ['#', 'C', 'R', 'H', 'S', '/', '\\', 'q', 'Q', 'P', 'p', 'G', '=', 'L', '~', '%', '^', 'v', '<', '>', 'D'];
+const BG_KEYS = ['w', 'p', 'b', 'm', 'c', 'r'];
 
 // ---- Objects ----------------------------------------------------------------
 // props: [key, label, type, a, b, step] type: num | sel | bool | text | enemy | boss
 const DECO_KINDS = ['lamp', 'cage lamp', 'red beacon', 'warning sign', 'skull sign', 'exit sign', 'vent', 'fan', 'barrel',
-  'toxic barrel', 'crate', 'gear', 'pipe across', 'pipe up', 'chain', 'cables', 'monitor', 'steam', 'tank', 'girder', 'hazard tape', 'gauge'];
+  'toxic barrel', 'crate', 'gear', 'pipe across', 'pipe up', 'chain', 'cables', 'monitor', 'steam', 'tank', 'girder', 'hazard tape', 'gauge', 'sparks', 'drip', 'server', 'piston'];
 
 const OBJ = {
   spawn:     { cat: 'MECHANICS', name: 'Player start', w: 10, h: 20, props: [] },
@@ -59,13 +69,25 @@ const OBJ = {
                ['len', 'Max length', 'num', 16, 1200, 8], ['on', 'On time (0 = always on)', 'num', 0, 10, 0.1], ['off', 'Off time', 'num', 0, 10, 0.1],
                ['delay', 'Delay (sec)', 'num', 0, 10, 0.1], ['dps', 'Damage / sec', 'num', 10, 999, 10], ['color', 'Colour', 'sel', ['red', 'green', 'blue', 'purple']]],
                def: { angle: 0, turn: 0, len: 400, on: 0, off: 0, delay: 0, dps: 200, color: 'red' } },
+  heater:    { cat: 'HAZARDS', name: 'Heat coil', props: [['tw', 'Width (tiles)', 'num', 1, 12, 1], ['dir', 'Mounted on', 'sel', ['floor', 'ceiling', 'left wall', 'right wall']],
+               ['period', 'Every (sec)', 'num', 0.5, 12, 0.1], ['on', 'Hot time (sec)', 'num', 0.2, 10, 0.1], ['delay', 'Delay (sec)', 'num', 0, 10, 0.1], ['dps', 'Burn / sec', 'num', 20, 600, 10]],
+               def: { tw: 2, dir: 'floor', period: 3, on: 1.4, delay: 0, dps: 90 } },
+  wallzap:   { cat: 'HAZARDS', name: 'Wall zapper', props: [['dir', 'Shoots', 'sel', ['right', 'left', 'down', 'up']], ['range', 'Max range', 'num', 16, 800, 8],
+               ['period', 'Every (sec)', 'num', 0.3, 10, 0.1], ['on', 'Zap time (sec)', 'num', 0.1, 10, 0.1], ['delay', 'Delay (sec)', 'num', 0, 10, 0.1], ['dmg', 'Damage', 'num', 5, 100, 5]],
+               def: { dir: 'right', range: 200, period: 2.2, on: 0.8, delay: 0, dmg: 35 } },
+  flamer:    { cat: 'HAZARDS', name: 'Flame jet', props: [['angle', 'Direction (deg)', 'num', -180, 180, 15], ['len', 'Flame length', 'num', 16, 200, 4],
+               ['period', 'Every (sec)', 'num', 0.5, 10, 0.1], ['on', 'Burn time (sec)', 'num', 0.2, 10, 0.1], ['delay', 'Delay (sec)', 'num', 0, 10, 0.1], ['dps', 'Burn / sec', 'num', 20, 600, 10]],
+               def: { angle: -90, len: 64, period: 2.6, on: 1.2, delay: 0, dps: 150 } },
+  mine:      { cat: 'HAZARDS', name: 'Proximity mine', w: 10, h: 5, props: [['dmg', 'Damage', 'num', 5, 150, 5], ['radius', 'Trigger distance', 'num', 8, 120, 4]], def: { dmg: 50, radius: 28 } },
+  vent:      { cat: 'MECHANICS', name: 'Steam launcher', props: [['power', 'Launch power', 'num', 100, 900, 10], ['period', 'Every (sec, 0 = always)', 'num', 0, 10, 0.1], ['on', 'Blast time (sec)', 'num', 0.1, 10, 0.1]],
+               def: { power: 420, period: 0, on: 1 } },
   enemy:     { cat: 'ENEMIES', name: 'Enemy', props: [['def', 'Type', 'enemy'], ['face', 'Faces', 'sel', ['left', 'right']]], def: { def: 'grunt', face: 'left' } },
   boss:      { cat: 'BOSSES', name: 'Boss', props: [['def', 'Boss', 'boss']], def: { def: 'warden' } },
   arena:     { cat: 'BOSSES', name: 'Boss arena', props: [['tw', 'Width (tiles)', 'num', 6, 80, 1], ['th', 'Height (tiles)', 'num', 4, 40, 1]], def: { tw: 24, th: 12 } },
   deco:      { cat: 'DECOR', name: 'Decoration', props: [['kind', 'Kind', 'sel', DECO_KINDS], ['front', 'In front of player', 'bool']], def: { kind: 'lamp', front: false } },
 };
 // object types that can follow keyframes
-const MOVABLE = { platform: 1, saw: 1, laser: 1, turret: 1, cturret: 1, coil: 1, deco: 1, crusher: 1, sign: 1, ammo: 1, rockets: 1, health: 1 };
+const MOVABLE = { platform: 1, saw: 1, laser: 1, turret: 1, cturret: 1, coil: 1, deco: 1, crusher: 1, sign: 1, ammo: 1, rockets: 1, health: 1, flamer: 1, heater: 1 };
 
 // size of an object (for selection + drawing), centred on o.x,o.y
 function objSize(o) {
@@ -78,6 +100,10 @@ function objSize(o) {
     case 'cturret': return { w: 16, h: 12 };
     case 'coil': return { w: 12, h: 22 };
     case 'laser': return { w: 10, h: 10 };
+    case 'heater': return (o.dir === 'left wall' || o.dir === 'right wall') ? { w: 6, h: (o.tw || 2) * TS } : { w: (o.tw || 2) * TS, h: 6 };
+    case 'wallzap': return { w: 12, h: 12 };
+    case 'flamer': return { w: 10, h: 10 };
+    case 'vent': return { w: 16, h: 6 };
     case 'arena': return { w: (o.tw || 24) * TS, h: (o.th || 12) * TS };
     case 'enemy': { const e = getEnemy(o.def); const s = enemySize(e); return s; }
     case 'boss': { const b = getBoss(o.def); return bossSize(b); }
@@ -88,7 +114,8 @@ function objSize(o) {
 function decoSize(k) {
   return ({ 'lamp': [10, 8], 'cage lamp': [8, 10], 'red beacon': [8, 8], 'warning sign': [14, 12], 'skull sign': [14, 12], 'exit sign': [16, 8], 'vent': [16, 10],
     'fan': [20, 20], 'barrel': [12, 16], 'toxic barrel': [12, 16], 'crate': [16, 16], 'gear': [24, 24], 'pipe across': [32, 6], 'pipe up': [6, 32], 'chain': [4, 32],
-    'cables': [32, 12], 'monitor': [16, 12], 'steam': [8, 8], 'tank': [24, 32], 'girder': [32, 8], 'hazard tape': [32, 4], 'gauge': [10, 10] }[k] || [16, 16])
+    'cables': [32, 12], 'monitor': [16, 12], 'steam': [8, 8], 'tank': [24, 32], 'girder': [32, 8], 'hazard tape': [32, 4], 'gauge': [10, 10],
+    'sparks': [6, 24], 'drip': [16, 8], 'server': [14, 24], 'piston': [16, 32] }[k] || [16, 16])
     .reduce((o, v, i) => (o[i ? 'h' : 'w'] = v, o), {});
 }
 

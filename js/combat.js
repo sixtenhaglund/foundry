@@ -36,6 +36,10 @@ function updateBullets(w, dt) {
     for (let s = 0; s < steps && !b.dead; s++) {
       b.x += b.vx * dt / steps; b.y += b.vy * dt / steps;
       if (blockedAt(w, b.x, b.y, 'b')) { b.dead = true; spawnParts(w, b.x - b.vx * 0.005, b.y - b.vy * 0.005, 3, '#ffd080', 50, 0.2, 100); break; }
+      const wet = !!TILES[tileUnder(w, b.x, b.y)]?.liquid;
+      if (wet && !b.wet) { splash(w, b.x, b.y, 25); if (TILES[tileUnder(w, b.x, b.y)]?.lava) { b.dead = true; break; } }
+      b.wet = wet;
+      if (b.owner === 'p' && w.pmines.length && shootMines(w, b)) { b.dead = true; break; }
       if (b.owner === 'p') {
         for (const T of hitTargets(w)) {
           const R = T.r;
@@ -77,6 +81,7 @@ function boomFx(w, x, y, big = 1) {
   spawnParts(w, x, y, Math.round(20 * big), '#ffb040', 140 * big, 0.6, 50);
   spawnParts(w, x, y, Math.round(10 * big), '#606060', 80 * big, 1, -30, 2);
   w.shake = Math.max(w.shake, 6 * big); sfx('boom');
+  kickRopes(w, x, y, 400 * big); splash(w, x, y, 140 * big);
 }
 function explode(w, x, y, rad, dmg, owner) {
   boomFx(w, x, y, rad / 34);

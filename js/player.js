@@ -22,8 +22,13 @@ function updatePlayer(w, dt, ctl) {
   // ride a moving platform
   if (P.plat) { P.x += P.plat.dx; P.y += P.plat.dy; }
 
-  P.water = TILES[tileUnder(w, cx, cy)]?.water;
+  P.water = TILES[tileUnder(w, cx, cy)]?.liquid;
   const headWet = TILES[tileUnder(w, cx, P.y + 3)]?.water;
+  if (TILES[tileUnder(w, cx, P.y + P.h - 3)]?.lava) {            // lava: burns fast and bounces you up
+    if (P.inv <= 0) hurtPlayer(w, 30, null, 0, 'MELTED IN LAVA');   // first touch hurts a lot
+    burnPlayer(w, 250 * dt, 'MELTED IN LAVA'); if (P.vy > -100) P.vy = -230;
+    if (Math.random() < 0.5) w.parts.push({ x: cx + rand(-4, 4), y: P.y + P.h - 2, vx: rand(-20, 20), vy: rand(-80, -30), life: 0.5, max: 0.5, col: '#ffb040', grav: 100, size: 1, fire: true });
+  }
   const onLadder = !!rectInTile(w, { x: P.x + 3, y: P.y + 2, w: P.w - 6, h: P.h - 2 + (ctl.down ? 3 : 0) }, T => T.ladder);
   if (onLadder && (ctl.up || ctl.down) && !P.climb) { P.climb = true; P.vy = 0; }
   if (!onLadder) P.climb = false;
@@ -59,7 +64,10 @@ function updatePlayer(w, dt, ctl) {
   if (r.hitY) P.vy = 0;
   P.ground = r.ground; P.plat = r.plat;
   if (P.climb && r.ground && ctl.down) P.climb = false;
-  if (!wasWater && TILES[tileUnder(w, P.x + P.w / 2, P.y + P.h / 2)]?.water) { sfx('splash'); spawnParts(w, P.x + 5, P.y + 10, 8, '#7ab8ff', 60, 0.5, 200); }
+  const nowWet = TILES[tileUnder(w, P.x + P.w / 2, P.y + P.h / 2)]?.liquid;
+  if (!wasWater && nowWet) { sfx('splash'); splash(w, P.x + 5, P.y + P.h - 6, Math.max(60, Math.abs(P.vy) * 0.5)); }
+  if (wasWater && !nowWet && P.vy < 0) splash(w, P.x + 5, P.y + P.h, -50);
+  if (P.water && Math.abs(P.vx) > 30 && Math.random() < 0.3) splash(w, P.x + 5, P.y + 4, 6);
   P.anim += Math.abs(P.vx) * dt;
 
   // breath under water
@@ -141,5 +149,9 @@ function burnPlayer(w, dmg, cause) {
 function killPlayer(w, cause) {
   const P = w.player; if (P.dead || w.won || w.dummy) return;
   P.dead = true; P.deadT = 0; P.hp = 0; w.deathCause = cause; w.shake = 8;
-  spawnParts(w, P.x + 5, P.y + 10, 30, '#c03030', 160, 0.9, 400); spawnParts(w, P.x + 5, P.y + 10, 10, '#3a4a3a', 120, 0.9, 400); sfx('die');
+  const C = PLAYER_COLS, x = P.x + 5, y = P.y + 10;
+  addDebris(w, x, y - 7, 4, 4, C.helmet, P.vx * 0.5, -160); addDebris(w, x, y, 7, 4, C.body, P.vx * 0.5, -80);
+  for (let i = 0; i < 2; i++) { addDebris(w, x, y + 4, 8, 2, C.legs, P.vx * 0.5, -60); addDebris(w, x, y - 2, 6, 2, C.body, P.vx * 0.5, -100); }
+  addDebris(w, x, y, 7, 2, '#1c2026', P.vx, -140); addDebris(w, x, y - 6, 9, 1, '#b02c2c', 0, -120);
+  spawnParts(w, x, y, 14, '#ffd060', 140, 0.5, 300); sfx('die');
 }

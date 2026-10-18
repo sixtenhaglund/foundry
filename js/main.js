@@ -73,7 +73,7 @@ function drawMenuBg(dt) {
   if (!menuWorld) { menuWorld = makeWorld(CAMPAIGN[1], { editor: false }); menuWorld.enemies = []; menuWorld.player = null; }
   const w = menuWorld; w.time += dt; menuT += dt;
   const q = AU.ctx; AU.ctx = null;
-  try { updateMovers(w, dt); updateHazards(w, dt); updateBullets(w, dt); updateParts(w, dt); } finally { AU.ctx = q; }
+  try { updateMovers(w, dt); updateHazards(w, dt); updateTraps(w, dt); updateBullets(w, dt); updateParts(w, dt); updateAnim(w, dt, null); } finally { AU.ctx = q; }
   const span = Math.max(0, w.pw - VW);
   const cam = { x: span * (0.5 - 0.5 * Math.cos(menuT * 0.05)), y: Math.max(0, w.ph - VH) * 0.6 };
   drawWorld(bctx, w, cam, VW, VH);

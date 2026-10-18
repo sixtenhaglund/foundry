@@ -27,6 +27,7 @@ function updateEnemies(w, dt) {
     const D = alive ? dist(ecx, ecy, pcx, pcy) : 1e9;
     const inFront = alive && ((pcx - ecx) * e.face > 0 || e.alert > 0 || D < 50);
     const sees = alive && D < d.sight && inFront && lineClear(w, ecx, eyeY, pcx, pcy - 4);
+    if (sees && e.alert <= 0 && e.ground && d.ai !== 'fly') e.vy = -110;   // little jump of surprise
     if (sees) e.alert = 2.5;
     const hunting = e.alert > 0 && alive;
     const W = enemyWeapon(d);
@@ -82,7 +83,8 @@ function updateEnemies(w, dt) {
         }
       }
       e.vx += clamp(want - e.vx, -600 * dt, 600 * dt);
-      const inWater = TILES[tileUnder(w, ecx, ecy)]?.water;
+      const inWater = TILES[tileUnder(w, ecx, ecy)]?.liquid;
+      if (TILES[tileUnder(w, ecx, e.y + e.h - 2)]?.lava) { damageEnemy(w, e, 300 * dt, null, true); e.vy = Math.min(e.vy, -120); }
       e.vy = Math.min(e.vy + (inWater ? 250 : 950) * dt, inWater ? 60 : 430);
       if (d.jump && hunting && e.ground && pcy < ecy - 30 && Math.abs(pcx - ecx) < 60 && Math.random() < dt * 2) e.vy = -320;
       const r = moveBody(w, e, e.vx * dt, e.vy * dt, false);
@@ -127,6 +129,7 @@ function updateEnemies(w, dt) {
 
 function enemyShoot(w, e, W, a) {
   const d = e.d, sx = e.x + e.w / 2 + Math.cos(a) * 8, sy = e.y + Math.min(6, e.h * 0.3) + Math.sin(a) * 4;
+  e.recoil = 1;
   for (let i = 0; i < W.pellets; i++) {
     const aa = a + (W.pellets > 1 ? (i / (W.pellets - 1) - 0.5) * W.spread * 2 : rand(-W.spread, W.spread)) + rand(-0.03, 0.03);
     w.bullets.push({ x: sx, y: sy, vx: Math.cos(aa) * d.bspeed, vy: Math.sin(aa) * d.bspeed, owner: 'e', dmg: d.dmg, life: 2.5, col: '#ff6040', cause: d.name });
@@ -150,8 +153,8 @@ function damageEnemy(w, e, dmg, fromX, blast) {
   if (Math.random() < 0.5 || dmg > 5) spawnParts(w, cx, e.y + e.h / 2, 3, d.body === 'robot' || d.body === 'drone' ? '#ffd060' : '#a02020', 70, 0.35, 250);
   if (e.hp <= 0) {
     e.dead = true; e.deadT = 0; w.kills++;
-    spawnParts(w, cx, e.y + e.h / 2, 14, d.color, 120, 0.7, 300);
-    if (d.body === 'robot' || d.body === 'drone') boomFx(w, cx, e.y + e.h / 2, 0.5);
+    shatterEnemy(w, e);   // breaks into pieces that fly and bounce (anim.js)
+    if (d.body === 'drone') boomFx(w, cx, e.y + e.h / 2, 0.5);
     let drop = d.drop; if (drop === 'random') drop = Math.random() < 0.55 ? 'ammo' : Math.random() < 0.3 ? 'health' : Math.random() < 0.25 ? 'rockets' : 'nothing';
     if (drop !== 'nothing' && OBJ[drop]) w.pickups.push({ t: drop, x: cx, y: Math.min(e.y + e.h - 5, w.ph), amount: { ammo: 6, rockets: 1, health: 20 }[drop], drop: true });
   }
